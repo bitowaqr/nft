@@ -282,6 +282,303 @@
       return(out)
     }
     
+
+
+
+
+
+
+NivelFluTrend = function(from = from,
+                         incidence.data.path = incidence.data.path,
+                         to = Sys.Date()-1,   
+                         forecast.to = Sys.Date()-1 + 28)
+  {
+  
+  
+  time1 = Sys.time()
+  
+  influenza.nl = read.csv(incidence.data.path)
+  names(influenza.nl) = c("date","y") 
+  influenza.nl$date = as.Date(influenza.nl$date)
+  influenza.nl = influenza.nl[influenza.nl$date>= from,]
+  split.at = max(influenza.nl$date)+1
+  influenza.nl = rbind(influenza.nl,
+                       data.frame(date=seq(from=max(influenza.nl$date)+7,to=to,by=7),
+                                  y=NA))
+  
+  # WIKIPEDIA DATA
+  
+  # Retrieve linked articles
+  wiki.pages = pft_wiki_lp(term = term,              # primary page of interest
+                           language_of_interest = "nl",     # Wikipedia project language
+                           backlinked = 0,                  # Also want to retrieve backlinks?
+                           manual.pages=c(""))  # none specified
+  
+  
+  # Download from Wikishark and Wikipedia API
+  wiki.df = fGetWikipediaData(pages = wiki.pages[1],            # Wikipedia article names
+                              language_of_interest =  "nl",  # Project language
+                              from = from,  # Download from
+                              to = to,    # Download up to
+                              status = 0)  
+  wiki.df  = data.frame(date=wiki.df$date)
+  
+  for(i in 1:length(wiki.pages)){
+    cat(i,"of",length(wiki.pages), " ",round(i/length(wiki.pages),4)*100,"% \n")
+    tryCatch({
+      nl.wikipedia.input.data = fGetWikipediaData(pages = wiki.pages[i],            # Wikipedia article names
+                                                  language_of_interest =  "nl",  # Project language
+                                                  from = from,  # Download from
+                                                  to = to,    # Download up to
+                                                  status = 0)                    # Print download status
+      
+      wiki.df = cbind(wiki.df,nl.wikipedia.input.data[,-1])
+      names(wiki.df)[length(names(wiki.df))] = wiki.pages[i]
+    }, error=function(e) cat("Something went wrong with ",wiki.pages[i],": page dropped, continue \n"))
+  }
+  
+  names(wiki.df)[-1] = paste("wiki.",names(wiki.df)[-1],sep="")
+  
+    # GOOGLE DATA
+    google_primer = gtrends(keyword=term,              # term = "influenza"
+                            geo=country_of_interest,  # "DE" = Germany in ISO_3166-2
+                            time=paste(from+1,to+1),      # from= 2010-07-31 to=2017-07-31
+                            gprop ="web")             # Search in webqueries
+    tops = google_primer$related_queries$related_queries=="top" 
+    google_related = google_primer$related_queries$value[tops]
+    g.trends.keywords = c(term,google_related)
+    
+    for(i in 1:length(g.trends.keywords)){
+      cat(round(i/length(g.trends.keywords),4)*100,"% \n")
+      extended.related = gtrends(keyword=g.trends.keywords[i],              # term = "influenza"
+                                 geo=country_of_interest,  # "DE" = Germany in ISO_3166-2
+                                 time=paste(from+1,to+1),      # from= 2010-07-31 to=2017-07-31
+                                 gprop ="web")             # Search in webqueries
+      tops = extended.related$related_queries$related_queries=="top" 
+      google_related.extended = extended.related$related_queries$value[tops]
+      google_related.extended = google_related.extended[1:5]
+      g.trends.keywords = unique(g.trends.keywords,google_related.extended)
+    }
+  
+  g.news.keyword = "griep"
+  
+  g.trends.input =  fGetGoogleData(keyword = g.trends.keywords, # 25 ++ keywords from Google trends
+                                   country_of_interest=country_of_interest,
+                                   from=paste(as.Date(from)),
+                                   to=paste(as.Date(to)),
+                                   status= 1,    
+                                   prefix="g.trends.")
+  
+  g.news.input =  fGetGoogleData(keyword = g.news.keyword,
+                                 country_of_interest=country_of_interest,
+                                 from=paste(as.Date(from)+1),
+                                 to=paste(as.Date(to)+1),
+                                 status= 1,    
+                                 prefix="g.news.",
+                                 gprop="news")    # Retrieving Google News search queries
+  
+  google.input.data = merge(g.trends.input,g.news.input,by="date",all=T)
+  
+  ###################  Data retrieving done ###################
+  
+  # merging and slicing data sets
+  influenza.nl$date = ISOweek(influenza.nl$date ) 
+  
+  df.full = merge(influenza.nl,google.input.data, by="date")
+  df.full = merge(df.full,wiki.df, by="date")
+  
+  df.full$date = ISOweek2date(paste(df.full$date,"-1",sep="")) # 
+  cat("Full data set:",dim(df.full)[1], "Weeks and",dim(df.full)[2]-2,"Predictors")
+  
+  split = which(df.full$date<split.at) 
+  
+  df.train = df.full[split,-c(1,2)] # Predictor training data set
+  y.train = df.full[split,c(2)] # Outcome for training data set
+  date.train = df.full[split,c(1)] # Date, not a predictor but useful for plotting
+  
+  df.test  = df.full[-split,-c(1,2)] # Predictors for testing/evaluation data set
+  date.test = df.full[-split,c(1)] # date for test data set
+  
+  
+  # PREPROCESSING
+  # NA handling
+  sum.NA.train = as.numeric(lapply(df.train,function(x){sum(is.na(x))})) 
+  sum.NA.train = sum.NA.train > length(df.train[,1]) * 0.1 
+  if(sum(sum.NA.train)>0){
+    df.train = df.train[-which(sum.NA.train)]
+    df.test = df.test[which(colnames(df.test) %in% colnames(df.train))]}
+  # and test data separately
+  sum.NA.test = as.numeric(lapply(df.test,function(x){sum(is.na(x))}))
+  sum.NA.test = sum.NA.test > length(df.test[,1]) * 0.1 
+  if(sum(sum.NA.test)>0){
+    df.test = df.test[-which(sum.NA.test)]
+    df.train = df.train[which(colnames(df.train) %in% colnames(df.test))]}
+  
+  # Imputing remaining NAs
+  df.train = na.ma(df.train , k = 3, weighting = "exponential") 
+  df.test = na.ma(df.test , k = 3, weighting = "exponential") 
+  
+  # Removing features with near zero variance
+  nearZeroVar = nearZeroVar(df.train,freqCut = 95/5 , uniqueCut = 25) 
+  if(sum(nearZeroVar)>0){
+    df.train = df.train[,-nearZeroVar] 
+    df.test = df.test[which(colnames(df.test) %in% colnames(df.train))]}
+  
+  ## ------------------------------------------------------------------------
+  # Scaling, centering, transofrmation and imputation of remaining NAs by K-nearest neighbours
+  preprocess.df.train = preProcess(df.train, method=c("scale","center","BoxCox"))
+  df.train = predict(preprocess.df.train, newdata = df.train)
+  df.test = predict(preprocess.df.train,newdata = df.test)
+  
+  
+  # MODEL BUILDING
+  controlObject <- trainControl(method = "timeslice",
+                                initialWindow = 52,  # First model is trained on 52 weeks (x)
+                                horizon = 1, #4?!
+                                fixedWindow = FALSE, # Origin stays the same
+                                allowParallel = TRUE)# Paralel computing can speed things up
+  
+  
+  # paralel computing : PROBLEM FOR WINDOWS?
+  no_cores <- detectCores() - 1  
+  cl <- makeCluster(no_cores, type="FORK")
+  registerDoParallel(cl)  
+  
+  
+  
+  
+  
+  # partial least square
+  M.pls = train(y= y.train ,
+                x = df.train,
+                method = "pls",
+                tuneLength = 10,
+                trControl = controlObject)
+  
+  
+  # lasso regression (glmnet)
+  # lasso grid
+  lassoGrid <- expand.grid(.alpha = c(.2, .4, .6, .8),.lambda = seq(.05, 5, length = 50)) # refined grid
+  # Model
+  M.lasso <- train(y= y.train ,
+                   x = df.train,
+                   method = "glmnet",
+                   family = "gaussian", # tried poisson, worse!
+                   tuneGrid = lassoGrid,
+                   trControl = controlObject)
+  
+  # Cubist (cubist)
+  # cubist grid
+  cubistGrid <- expand.grid(.committees = seq(20,60,by=5),.neighbors=c(3,4,5,6,7))
+  # Model
+  M.cubist = train(y= y.train ,
+                   x = df.train,
+                   method = "cubist",
+                   tuneGrid = cubistGrid,
+                   trControl = controlObject)
+  
+  # Saving results
+  models.nl = list(result.list = list(M.pls = M.pls,
+                                      #M.ridge = M.ridge,
+                                      M.lasso = M.lasso
+                                      ,M.cubist = M.cubist
+  )
+  , eval.list = list())
+  
+  
+  for(i in 1:length(models.nl$result.list)){
+    tryCatch({
+      name.of.model = names(models.nl$result.list)[i]
+      models.nl$eval.list[[i]] = fEvalModel(models.nl$result.list[[i]])
+      names(models.nl$eval.list)[i] = names(models.nl$result.list)[i]},
+      error = function(e){cat(names(models.nl$result.list)[i] ,": Error \n")})
+  }
+  
+  # lowest CV RMSE per model
+  means=NULL; sd = NULL; model.name = NULL
+  for(m in 1:length(models.nl$result.list)){
+    means[m] = mean(models.nl$result.list[[m]]$resample$RMSE,na.rm=T)
+    sd[m] = sd(models.nl$result.list[[m]]$resample$RMSE,na.rm=T)
+    model.name[m] = names(models.nl$result.list)[m]
+  }
+  sd = sd[order(means)]
+  model.name <- factor(model.name, levels = model.name[order(means)])
+  means = means[order(means)]
+  model.name <- factor(model.name, levels = model.name[order(means)])
+  
+  model.comparison = 
+    ggplot() +
+    geom_point(aes(x=means,y=model.name)) +
+    geom_line(aes(x=c(means-sd,means+sd),y=rep(model.name,times=2))) +
+    ggtitle("Model mean RMSE +/- 1 SD") +
+    xlab("RMSE") +
+    ylab("Model") 
+  
+  select.model = which(names(models.nl$result.list) == model.name[1])
+  final.model  = models.nl$result.list[[select.model]]
+  preds.train  = predict(final.model)
+  nowcast      = predict(final.model,newdata=df.test)
+  
+  forecast.date = seq(from=min(date.test), to = forecast.to,by=7)
+  
+  null.model = prophet(df=data.frame(ds = date.train,
+                                     y=y.train),
+                       growth = "linear",
+                       yearly.seasonality = T,
+                       weekly.seasonality = F)
+  forecast = make_future_dataframe(null.model, periods = length(forecast.date),freq="week")
+  null.model.forecast = predict(null.model, forecast)
+  select.training.preds = ISOweek(null.model.forecast$ds) %in% ISOweek(date.train)
+  preds.null.model = null.model.forecast$yhat[select.training.preds]
+  forecast = null.model.forecast$yhat[-which(select.training.preds)]
+  
+  ## ----nowcast vs forecast plot, warning=FALSE,fig.height=3,fig.width=8----
+  pnf.1 =
+    ggplot() +
+    
+    geom_line(aes(x=date.train,y=y.train,col="black"),size=2) +
+    
+    geom_line(aes(x=forecast.date,y=forecast,col="cyan")) +
+    geom_point(aes(x=forecast.date,y=forecast,col="cyan")) +
+    geom_line(aes(x=date.train,y=preds.null.model,col="cyan")) +
+    
+    geom_line(aes(x=date.train,y=preds.train,col="orange")) +
+    geom_line(aes(x=date.test,y=nowcast,col="red")) +
+    geom_point(aes(x=date.test,y=nowcast,col="red")) +
+    scale_color_manual(name ="", 
+                       values = c("black" = "black",
+                                  "cyan" = "cyan", 
+                                  "orange" = "orange",
+                                  "red" = "red"),
+                       labels = c("Actual incidence",
+                                  "Forecast", 
+                                  "Nowcast (training)" ,
+                                  "Nowcast")) +
+    geom_vline(xintercept = as.numeric( as.Date(max(date.train)))) +
+    geom_vline(xintercept = as.numeric( Sys.Date()),linetype=2,col="purple") +
+    ylab("Influenza incidence") +
+    xlab("2015/16") +
+    ggtitle("Forecast vs Nowcast model: Influenza season 2015/16") +
+    theme(plot.title = element_text(size = 10, face = "bold")) +
+    #xlim(c(as.Date("2016-11-01"),as.Date("2017-05-01"))) +
+    theme_minimal() 
+  
+  pnf.2 =
+    pnf.1 + 
+    xlim(min(date.test)-365,forecast.to)
+  
+  
+  combined.plot = plot_grid(pnf.1,pnf.2,nrow=2)
+  
+  file.name = paste("nft_data_",Sys.time(),".rdata",sep="")
+  save(list = ls(environment()), file = file.name)
+  
+  time2 = Sys.time()
+  cat("Time elapsed: ",time2-time1)
+  
+  cat(" \n All Data has been stored in", file.name)
+  return(file.name)
+}
     
     
     
