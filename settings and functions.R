@@ -456,7 +456,7 @@ NivelFluTrend = function(from = from,
   
   ## ------------------------------------------------------------------------
   # Scaling, centering, transofrmation and imputation of remaining NAs by K-nearest neighbours
-  preprocess.df.train = preProcess(df.train, method=c("scale","center","BoxCox"))
+  preprocess.df.train = preProcess(df.train, method=c("scale","center")) # "BoxCox" removed - too many errors occured with test data!
   df.train = predict(preprocess.df.train, newdata = df.train)
   df.test = predict(preprocess.df.train,newdata = df.test)
   
