@@ -417,10 +417,6 @@ NivelFluTrend = function(from = from,
   df.full = merge(influenza.nl,google.input.data, by="date")
   df.full = merge(df.full,wiki.df, by="date")
   
-  
-  do.call(data.frame,lapply(DT, function(x) replace(x, is.infinite(x),NA)))
-  
-  
   df.full$date = ISOweek2date(paste(df.full$date,"-1",sep="")) # 
   cat("\n Full data set:",dim(df.full)[1], "Weeks and",dim(df.full)[2]-2,"Predictors")
   
