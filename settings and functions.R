@@ -1,7 +1,7 @@
 #
 # # NIVEL FLU TREND 2018
 # # by Paul Schneider
-# 
+# # Version 02 JAN 2018
 
 # SETTING & FUNCTIONS
 
@@ -28,10 +28,6 @@ fGetWikipediaData = function(pages = wiki.pages[1:3],
                              from = as.Date("2010-08-01"),
                              to = as.Date("2016-07-31"),
                              status=1){
-  # ask.wiki.new
-  # This function does this
-  # This function does this
-  # This function does this
   
   from.wikishark = format(from,format="%m/%d/%Y")
   to.wikishark = format(as.Date("2015-09-30"),format="%m/%d/%Y")
@@ -144,21 +140,16 @@ fGetGoogleData = function(keyword = "influenza",
                           prefix="g.trends.",
                           gprop = "web") {
   
-  # Splitting the time span into two spans, each < 5 years
-  if(length(seq(as.Date(from),as.Date(to),by=1) ) > (365*5 -1)){
-    time.span1 =  paste(as.Date(from), as.Date(from)+(5*365-1))
-    time.span1.dates = ISOweek(seq(from=as.Date(from),to=as.Date(from)+(5*365-1), by=7))
-    time.span2 = paste(as.Date(to)-(5*365-1), as.Date(to))
-    time.span2.dates = ISOweek(seq(from=as.Date(as.Date(to)-(5*365-1)),to=as.Date(to), by=7))
-    time.span = unique(c(time.span1.dates,time.span2.dates))
-  } else {
-    time.span1 =  paste(as.Date(from), as.Date(to))
-    time.span1.dates = ISOweek(seq(from=as.Date(from),to=as.Date(to), by=7))
-    time.span = time.span1.dates
-  }
-  if(ISOweek(Sys.Date()) %in% time.span) {
-    time.span = time.span[-which(time.span ==ISOweek(Sys.Date()))]
-  }
+  
+  time.span1 =  paste(as.Date(from), as.Date(to))
+  time.span1.dates = ISOweek(seq(from=as.Date(from),to=as.Date(to), by=7))
+  time.span = time.span1.dates
+  
+  time.span.5y = time.span1
+  time.span.3m = "today 3-m"
+  time.span.1m = "today 1-m"
+  time.span.1w = "now 7-d"
+  
   
   google.input.data = as.data.frame(
     matrix(nrow = length(time.span),
@@ -169,42 +160,73 @@ fGetGoogleData = function(keyword = "influenza",
   for(p in 1:length(keyword)){
     if(status==1){cat("asking Google for statistics for",keyword[p]," - ",round(p/length(keyword),3)*100,"%" ,"\n")}
     tryCatch({ 
-      google.temp.t1 = gtrends(keyword = keyword[p],
+      google.temp.5y = gtrends(keyword = keyword[p],
                                geo = country_of_interest,
-                               time= time.span1 ,gprop = gprop) 
-      # Sys.sleep(0.1) 
-      if(length(seq(as.Date(from),as.Date(to),by=1) ) > 365*5-1){
-        google.temp.t2 = gtrends(keyword = keyword[p],
-                                 geo = country_of_interest,
-                                 time= time.span2 ,gprop = gprop) 
-        
-        # Rescaling the older data set to match (more or less) with the more recent data set
-        hits = Rescale.gtrends(df.t1=google.temp.t1,df.t2=google.temp.t2)
-        google.input.data[,p+1] = as.numeric(hits)
-      } else {
-        if(sum(class(google.temp.t1$interest_over_time$date[1])=="POSIXct" )>0){
-          hits = aggregate(google.temp.t1$interest_over_time$hits, list(ISOweek(google.temp.t1$interest_over_time$date)),sum)
-          google.input.data[,p+1] = as.numeric(hits$x)
-          
-        } else {
-          google.input.data[,p+1] = as.numeric(google.temp.t1$interest_over_time$hits)
-          
-        }
-        
-      }
-      error.rate <<- 0
+                               time= time.span.5y ,gprop = gprop) 
+      google.temp.5y = google.temp.5y$interest_over_time[,c(1,2)]
+      google.temp.5y$week = ISOweek(google.temp.5y$date)
+      
+      Sys.sleep(0.1) 
+      google.temp.3m = gtrends(keyword = keyword[p],
+                               geo = country_of_interest,
+                               time= time.span.3m ,gprop = gprop) 
+      google.temp.3m = google.temp.3m$interest_over_time[,c(1,2)]
+      google.temp.3m$week = ISOweek(google.temp.3m$date)
+      if(sum(as.Date(google.temp.3m$date)>to)>0){
+      google.temp.3m = google.temp.3m[-which(as.Date(google.temp.3m$date)>to),]}
+      google.temp.3m = aggregate(hits ~ week, google.temp.3m, mean)
+      
+      Sys.sleep(0.1) 
+      google.temp.1m = gtrends(keyword = keyword[p],
+                               geo = country_of_interest,
+                               time= time.span.1m ,gprop = gprop)
+      google.temp.1m = google.temp.1m$interest_over_time[,c(1,2)]
+      google.temp.1m$week = ISOweek(google.temp.1m$date)
+      if(sum(as.Date(google.temp.1m$date)>to)>0){
+        google.temp.1m = google.temp.1m[-which(as.Date(google.temp.1m$date)>to),]}
+      google.temp.1m = aggregate(hits ~ week, google.temp.1m, mean)
+      
+      Sys.sleep(0.1) 
+      google.temp.1w = gtrends(keyword = keyword[p],
+                               geo = country_of_interest,
+                               time= time.span.1w ,gprop = gprop)
+      google.temp.1w = google.temp.1w$interest_over_time[,c(1,2)]
+      google.temp.1w$week = ISOweek(google.temp.1w$date)
+      if(sum(as.Date(google.temp.1w$date)>to)>0){
+        google.temp.1w = google.temp.1w[-which(as.Date(google.temp.1w$date)>to),]}
+      google.temp.1w = aggregate(hits ~ week, google.temp.1w, mean)
+      
+      
+      fRescaleGtrendsNivel = function(df.t1,df.t2){
+        match1 = df.t1[match(df.t2$week,df.t1$week),]
+        match1 = match1[!is.na(match1$week),]
+        match2 = df.t2[match(df.t1$week,df.t2$week),]
+        match2 = match2[!is.na(match2$week),]
+        rescale.factor = lm(data=match1,match2$hits ~ hits+0) 
+        df.t1$hits = round(predict(rescale.factor,newdata = df.t1),1) 
+        df.t1=df.t1[df.t1$week<min(df.t2$week),]
+        hits = as.numeric(c(df.t1$hits,df.t2$hits))
+        weeks = c(df.t1$week, df.t2$week)
+        scaled.df = data.frame(weeks,hits,stringsAsFactors = F)
+        return(scaled.df)}
+      
+      scaled.df.5y.3m = fRescaleGtrendsNivel(google.temp.5y,google.temp.3m)
+      scaled.df.5y.3m.1m = fRescaleGtrendsNivel(scaled.df.5y.3m,google.temp.1m)
+      scaled.df.5y.3m.1m.1w = fRescaleGtrendsNivel(scaled.df.5y.3m.1m,google.temp.1w)
+      
+      google.input.data[,p+1] = as.numeric(scaled.df.5y.3m.1m.1w$hits)
     },  error=function(e) { 
-      if(status==1){cat("\n Uups...Something went wrong with",keyword[p],"\n")  }
-      Sys.sleep(0.5)
-    })
+        if(status==1){
+          cat("\n Uups...Something went wrong with",keyword[p],"\n")
+          }
+      Sys.sleep(0.2)
+  })
     
-  }
-  
-  names(google.input.data) = c("date",paste(prefix,gsub(" ","\\.",keyword),sep=""))
-  return(google.input.data)
 }
 
-
+names(google.input.data) = c("date",paste(prefix,gsub(" ","\\.",keyword),sep=""))
+return(google.input.data)
+}
 
 # RESCALE GOOGLE DATA
 Rescale.gtrends = function(df.t1,df.t2){
@@ -290,9 +312,9 @@ fEvalModel = function(model){
 
 NivelFluTrend = function(from = from,
                          incidence.data.path = incidence.data.path,
-                         to = Sys.Date()-1,   
+                         to = to,   
                          forecast.to = Sys.Date()-1 + 28)
-  {
+{
   
   
   time1 = Sys.time()
@@ -346,7 +368,7 @@ NivelFluTrend = function(from = from,
   cat("\n Retrieving Google keyword info")
   google_primer = gtrends(keyword=term,              # term = "influenza"
                           geo=country_of_interest,  # "DE" = Germany in ISO_3166-2
-                          time=paste(from+1,to+1),      # from= 2010-07-31 to=2017-07-31
+                          time=paste(from,to),      # from= 2010-07-31 to=2017-07-31
                           gprop ="web")             # Search in webqueries
   tops = google_primer$related_queries$related_queries=="top" 
   google_related = google_primer$related_queries$value[tops]
@@ -356,7 +378,7 @@ NivelFluTrend = function(from = from,
     cat(round(i/length(g.trends.keywords),4)*100,"% \n")
     extended.related = gtrends(keyword=g.trends.keywords[i],              # term = "influenza"
                                geo=country_of_interest,  # "DE" = Germany in ISO_3166-2
-                               time=paste(from+1,to+1),      # from= 2010-07-31 to=2017-07-31
+                               time=paste(from,to),      # from= 2010-07-31 to=2017-07-31
                                gprop ="web")             # Search in webqueries
     tops = extended.related$related_queries$related_queries=="top" 
     google_related.extended = extended.related$related_queries$value[tops]
@@ -376,13 +398,15 @@ NivelFluTrend = function(from = from,
   
   g.news.input =  fGetGoogleData(keyword = g.news.keyword,
                                  country_of_interest=country_of_interest,
-                                 from=paste(as.Date(from)+1),
-                                 to=paste(as.Date(to)+1),
+                                 from=paste(as.Date(from)),
+                                 to=paste(as.Date(to)),
                                  status= 1,    
                                  prefix="g.news.",
                                  gprop="news")    # Retrieving Google News search queries
   
   google.input.data = merge(g.trends.input,g.news.input,by="date",all=T)
+  # IMMIDIATELY REMOVING 
+  google.input.data = google.input.data[,-(nearZeroVar(google.input.data,uniqueCut = 25))]
   
   ###################  Data retrieving done ###################
   
@@ -392,6 +416,10 @@ NivelFluTrend = function(from = from,
   
   df.full = merge(influenza.nl,google.input.data, by="date")
   df.full = merge(df.full,wiki.df, by="date")
+  
+  
+  do.call(data.frame,lapply(DT, function(x) replace(x, is.infinite(x),NA)))
+  
   
   df.full$date = ISOweek2date(paste(df.full$date,"-1",sep="")) # 
   cat("\n Full data set:",dim(df.full)[1], "Weeks and",dim(df.full)[2]-2,"Predictors")
@@ -404,7 +432,7 @@ NivelFluTrend = function(from = from,
   
   df.test  = df.full[-split,-c(1,2)] # Predictors for testing/evaluation data set
   date.test = df.full[-split,c(1)] # date for test data set
-  
+
   
   # PREPROCESSING
   # NA handling
@@ -439,10 +467,10 @@ NivelFluTrend = function(from = from,
   
   # MODEL BUILDING
   controlObject <- trainControl(method = "timeslice",
-                                initialWindow = 52,  # First model is trained on 52 weeks (x)
+                                initialWindow = 52*2,   # First model is trained on 2 years
                                 horizon = 1, #4?!
-                                fixedWindow = FALSE, # Origin stays the same
-                                allowParallel = TRUE)# Paralel computing can speed things up
+                                fixedWindow = FALSE,  # Origin stays the same
+                                allowParallel = TRUE) # Paralel computing can speed things up
   
   
   # paralel computing : PROBLEM FOR WINDOWS?
@@ -461,7 +489,7 @@ NivelFluTrend = function(from = from,
   M.pls = train(y= y.train ,
                 x = df.train,
                 method = "pls",
-                tuneLength = 10,
+                tuneLength = 20,
                 trControl = controlObject)
   
   
@@ -469,7 +497,7 @@ NivelFluTrend = function(from = from,
   # lasso grid
   cat("\n --- Building Lasso ---")
   
-  lassoGrid <- expand.grid(.alpha = c(.2, .4, .6, .8),.lambda = seq(.05, 5, length = 50)) # refined grid
+  lassoGrid <- expand.grid(.alpha = c(.2, .4, .6, .8),.lambda = seq(.05, 3, length = 50)) # refined grid
   # Model
   M.lasso <- train(y= y.train ,
                    x = df.train,
@@ -483,7 +511,7 @@ NivelFluTrend = function(from = from,
   
   cat("\n --- Building Cubist ---")
   
-  cubistGrid <- expand.grid(.committees = seq(20,60,by=5),.neighbors=c(3,4,5,6,7))
+  cubistGrid <- expand.grid(.committees = seq(40,100,by=5),.neighbors=c(3,4,5,6,7,9))
   # Model
   M.cubist = train(y= y.train ,
                    x = df.train,
@@ -536,7 +564,7 @@ NivelFluTrend = function(from = from,
   preds.train  = predict(final.model)
   nowcast      = predict(final.model,newdata=df.test)
   
-
+  
   cat("\n --- Creating Forecast ---")
   
   forecast.date = seq(from=min(date.test), to = forecast.to,by=7)
@@ -601,6 +629,5 @@ NivelFluTrend = function(from = from,
   cat(" \n All Data has been stored in", file.name)
   return(file.name)
 }
-
 
 
