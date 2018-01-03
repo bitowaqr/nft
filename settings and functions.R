@@ -77,7 +77,7 @@ fGetWikipediaData = function(pages = wiki.pages[1:3],
   }
   names(wiki)[-1] = paste("wiki.",names(wiki)[-1],sep="")
   
-  aggregate.data = aggregate(wiki[,-1], list(ISOweek(wiki$date)),FUN=function(x){sum(x,na.rm=T)},simplify=T)[,2]
+  aggregate.data = aggregate(wiki[,-1], list(ISOweek(wiki$date)),FUN=function(x){mean(x,na.rm=T)},simplify=T)[,2]
   wiki= data.frame(date=unique(ISOweek(wiki$date)),
                    aggregate.data)
   return(wiki)
