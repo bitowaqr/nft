@@ -1,7 +1,7 @@
 #
 # # NIVEL FLU TREND 2018
 # # by Paul Schneider
-# # Version 02 JAN 2018
+# # Version 10 JAN 2018
 
 # SETTING & FUNCTIONS
 
@@ -23,6 +23,22 @@ pft_packages(required_packages)
 # FUNCTIONS
 
 # GET WIKI DATA
+##
+#
+#
+#
+#
+#
+#
+#difference
+#
+#
+#
+#
+#
+#
+#
+
 fGetWikipediaData = function(pages = wiki.pages[1:3],
                              language_of_interest =  "nl", 
                              from = as.Date("2010-08-01"),
@@ -417,6 +433,7 @@ NivelFluTrend = function(from = from,
   df.full = merge(influenza.nl,google.input.data, by="date")
   df.full = merge(df.full,wiki.df, by="date")
   
+  
   df.full$date = ISOweek2date(paste(df.full$date,"-1",sep="")) # 
   cat("\n Full data set:",dim(df.full)[1], "Weeks and",dim(df.full)[2]-2,"Predictors")
   
@@ -456,14 +473,14 @@ NivelFluTrend = function(from = from,
   
   ## ------------------------------------------------------------------------
   # Scaling, centering, transofrmation and imputation of remaining NAs by K-nearest neighbours
-  preprocess.df.train = preProcess(df.train, method=c("scale","center")) # "BoxCox" removed - too many errors occured with test data!
+  preprocess.df.train = preProcess(df.train, method=c("scale","center"))
   df.train = predict(preprocess.df.train, newdata = df.train)
   df.test = predict(preprocess.df.train,newdata = df.test)
   
   
   # MODEL BUILDING
   controlObject <- trainControl(method = "timeslice",
-                                initialWindow = 52*2,   # First model is trained on 2 years
+                                initialWindow = 52,   # First model is trained on 2 years
                                 horizon = 1, #4?!
                                 fixedWindow = FALSE,  # Origin stays the same
                                 allowParallel = TRUE) # Paralel computing can speed things up
@@ -493,7 +510,7 @@ NivelFluTrend = function(from = from,
   # lasso grid
   cat("\n --- Building Lasso ---")
   
-  lassoGrid <- expand.grid(.alpha = c(.2, .4, .6, .8),.lambda = seq(.05, 3, length = 50)) # refined grid
+  lassoGrid <- expand.grid(.alpha = c(.2, .4, .6, .8),.lambda = seq(.05, 1, length = 50)) # refined grid
   # Model
   M.lasso <- train(y= y.train ,
                    x = df.train,
@@ -542,9 +559,9 @@ NivelFluTrend = function(from = from,
     model.name[m] = names(models.nl$result.list)[m]
   }
   sd = sd[order(means)]
-  model.name <- factor(model.name, levels = model.name[order(means)])
+  model.name = as.character(model.name)
+  model.name = model.name[order(means)]
   means = means[order(means)]
-  model.name <- factor(model.name, levels = model.name[order(means)])
   
   model.comparison = 
     ggplot() +
@@ -555,7 +572,7 @@ NivelFluTrend = function(from = from,
     ylab("Model") 
   
   select.model = which(names(models.nl$result.list) == model.name[1])
-  cat("\n --- Selected model:",select.model,"---")
+  cat("\n --- Selected model:",model.name[1],"---")
   final.model  = models.nl$result.list[[select.model]]
   preds.train  = predict(final.model)
   nowcast      = predict(final.model,newdata=df.test)
