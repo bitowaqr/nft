@@ -2,8 +2,6 @@
 title: "NIVEL FLU TREND"
 output: html_notebook
 ---
-Mariette Hooiveld <M.Hooiveld@nivel.nl>
-Gé Donker <G.Donker@nivel.nl>
 *Schneider PP^1^,Paget J^2^,  Donker G^2^, Hooiveld M^2^, Spreeuwenberg P^2^, Donker G^2^, van Gool C^3^*
 *^1^ Maastricht University, Netherlands Institute of Health Service Research*
 *^2^ Netherlands Institute of Health Service Research*
